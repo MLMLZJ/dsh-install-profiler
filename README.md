@@ -30,6 +30,15 @@ from the session catalog; enable it again and it comes back, re-reading
   upgrade/repair/uninstall failure matrix, and how to read a before/after diff —
   with the mechanism behind each one.
 
+## Where this stops and reverse-engineering starts
+
+The two skills are complementary, not overlapping:
+
+- **`install-profiler`** answers *what should be observed* — install layout, registry, services, logs, event sources, and which of them to watch at runtime.
+- **`reverse-engineering`** answers *how to read the code* — .NET (`ilspycmd`), Electron (`asar`), native (`objdump`/`rizin`/Ghidra).
+
+When an installer is itself a .NET bootstrap or an Electron/Squirrel app and strings are not enough, hand over with `profile.json` + `probe-plan.json` so the second skill does not redo discovery. `mine-strings.ps1` covers the common case without needing any decompiler; its output is evidence of capability, not proof of behaviour.
+
 ## The loop: static map → dynamic probe
 
 Static facts say what *should* happen; the fault is in what *actually* happens.
@@ -61,6 +70,7 @@ folders.
 |---|---|
 | `scripts/probe-tools.ps1` | Which extractor/inspector tools exist (read-only, ~2 s) |
 | `scripts/detect-installer.ps1` | Classify the package + emit the extraction plan |
+| `scripts/mine-strings.ps1` | No MSI database? Mine registry paths, log paths, services, URLs, GUIDs and error templates out of the binary (ASCII + UTF-16LE) |
 | `scripts/export-msi-tables.ps1` | MSI tables → JSON/CSV + derived profile |
 | `scripts/collect-state.ps1` | Read-only runtime snapshot for an installed app |
 | `scripts/build-probe-plan.ps1` | Static profile → targeted dynamic-observation plan |
@@ -113,6 +123,7 @@ scripts/*.ps1                the four tools
   Click-to-Run licensing MSI (service account `NT AUTHORITY\NetworkService`).
 - `collect-state` on an installed app → uninstall entry, data dir, log files,
   pending-reboot flag.
+- `mine-strings` on `7zFM.exe` → 4239 unique runs in 1 s, recovered `Software\7-Zip\FM\Columns` and the shell-extension key without any decompiler; on a 30 MB self-extracting installer it runs in ~8 s and correctly yields little, because the payload is compressed (the doc says to extract first).
 - `build-probe-plan` on the Acrobat profile → 85 watched paths (logical MSI
   directories resolved to real ones, incl. `ProgramFilesFolder` → `C:\Program
   Files`), 300 registry keys, 1 service with expected state, 32 process names,

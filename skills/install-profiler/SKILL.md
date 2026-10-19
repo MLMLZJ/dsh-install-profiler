@@ -98,6 +98,32 @@ For EXE-based installers the script is not recoverable, so derive behavior from 
 - the extracted payload's `.ini/.config/.json/.xml` defaults;
 - the vendor's own install log if one is written (`%TEMP%\*.log`, `%ProgramData%\<vendor>\Install.log`).
 
+## Step 3.5 — mine the binary's own strings (EXE-based installers, installed apps)
+
+MSI has a readable database; an EXE does not. Before calling an EXE installer opaque, mine it:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "<skill base>\scripts\mine-strings.ps1" -Path <installer or app dir> [-Recurse] [-MaxFiles 20]
+```
+
+It extracts printable ASCII **and UTF-16LE** runs (Windows stores paths and messages wide), deduplicates globally, and classifies them: registry paths, absolute / `%VAR%` paths, log files, service names, event-log hints, URLs, GUIDs, mutexes, error templates — plus markers for .NET / Electron / PyInstaller / UPX / packed binaries.
+
+Rules that keep it honest:
+
+- On a compressed or self-extracting installer the payload is compressed: **mine the extracted files, not the stub**. `7z x` / `innoextract` first, then run it on the output.
+- Every hit is a **lead, not a fact**: a registry path may be read-only, conditional or legacy. Confirm with the probe plan, a registry diff, or Procmon.
+- Registry hits become probe-plan candidates; log paths become watch paths; error templates become grep patterns for the app log and Event Log.
+- `markers.protected` or `upx` true means the interesting strings are packed; stop guessing and say so.
+
+## Optional deeper analysis: when the installer is itself an application
+
+A .NET bootstrap, an Electron/Squirrel app, or a native loader may not reveal its config keys, log paths or error strings through strings alone.
+
+- **If the `reverse-engineering` skill is installed**, load it and use its branches: Branch D (.NET → `ilspycmd -p -o <out>`), Branch E (Electron → `asar extract`), Branch C (native → `objdump -x` / `rizin`). Use that skill's own probe to confirm the decompiler exists before promising output.
+- **If it is not installed**, stop at strings evidence and mark every internal-behaviour claim `[inferred]`. Do not install decompilers silently.
+- **One skill, one job**: `install-profiler` decides *what to observe*; `reverse-engineering` decides *how to read the code*. Hand over the `profile.json` and `probe-plan.json` so the second skill does not redo discovery.
+- Licensing applies to both: reading an authorized copy for diagnostics is fine; using decompilation to bypass licensing, activation or DRM is refused.
+
 ## Step 4 — build the profile (MSI: authoritative)
 
 ```powershell
@@ -176,6 +202,8 @@ Keep chat output bounded: summarize the top findings and point at files. Quote a
 - PowerShell 5.1 reads a `.ps1` file **without BOM as ANSI**; keep bundled scripts ASCII-only or the Chinese in comments/strings turns into mojibake before it ever reaches output.
 - `@($someGenericList)` and pipelines over `List[object]` can throw the misleading `Argument types do not match` (`PSToObjectArrayBinder`); call `.ToArray()` first.
 - `try { } catch { }` is a statement, not an expression — it cannot sit inside a hashtable literal.
+- `strings`-style scanning is only meaningful on uncompressed data; a packed or SFX payload yields garbage, and mistaking that garbage for evidence is worse than saying "packed".
+- Tighten string filters before trusting them: a drive-letter regex `^[A-Za-z]:\\` matches random binary runs, so require at least 4 alphanumerics, a word character after the separator, and a minimum length.
 - PowerShell variable names are case-insensitive: a local `$allTables` collides with a `[switch]$AllTables` script parameter and throws a misleading "cannot convert Object[] to SwitchParameter". Keep script parameters and locals distinct.
 - `Record.FieldCount` is not reliably exposed through late binding; use the `_Columns` row count.
 - `Directory.DefaultDir` is `target:source`, each side optionally `short|long` — split on `:` before `|`.

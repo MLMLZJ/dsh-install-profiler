@@ -55,8 +55,11 @@ $defs = @(
   @{ name = 'strings';       group = 'inspect';   candidates = @("$pf\SysinternalsSuite\strings.exe", "$pf86\SysinternalsSuite\strings.exe") }
   @{ name = 'objdump';       group = 'inspect';   candidates = @() }
   @{ name = 'dumpbin';       group = 'inspect';   candidates = @() }
-  @{ name = 'ilspycmd';      group = 'dotnet';    candidates = @("$env:USERPROFILE\.dotnet\tools\ilspycmd.exe") }
-  @{ name = 'dotnet';        group = 'dotnet';    candidates = @("$pf\dotnet\dotnet.exe") }
+  @{ name = 'ilspycmd';      group = 'decompile'; candidates = @("$env:USERPROFILE\.dotnet\tools\ilspycmd.exe") }
+  @{ name = 'dotnet';        group = 'decompile'; candidates = @("$pf\dotnet\dotnet.exe") }
+  @{ name = 'rizin';         group = 'decompile'; candidates = @() }
+  @{ name = 'upx';           group = 'decompile'; candidates = @() }
+  @{ name = 'monodis';       group = 'decompile'; candidates = @() }
   @{ name = 'python';        group = 'runtime';   candidates = @() }
   @{ name = 'node';          group = 'runtime';   candidates = @() }
   @{ name = 'npx';           group = 'runtime';   candidates = @() }
@@ -114,6 +117,8 @@ $missing = @($results | Where-Object { -not $_.found } | ForEach-Object { $_.nam
     'msiexec, reg, sc, wevtutil, eventvwr, msinfo32 are built into Windows.',
     'lessmsi/dark/innoextract/makeappx/sigcheck/strings/accesschk/Procmon are optional Sysinternals/WiX/third-party tools; install them only with user approval.',
     'export-msi-tables.ps1 needs no external tool: it uses the WindowsInstaller COM server.',
+    'mine-strings.ps1 needs no external tool either: it scans the binary directly (ASCII + UTF-16LE).',
+    'The decompile group is only needed when the installer/app itself must be read (.NET bootstrap, Electron, native loader). If the reverse-engineering skill is installed, use its probe for the deeper toolchain instead of duplicating it.',
     'In PowerShell 5.1, keep [void] before MSI COM Execute()/Close() calls; otherwise empty values leak into the pipeline.'
   )
 } | ConvertTo-Json -Depth 8

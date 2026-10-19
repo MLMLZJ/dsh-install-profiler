@@ -194,14 +194,19 @@ foreach ($k in $aPorts.Keys) { if (-not $bPorts.ContainsKey($k)) { Add-Finding '
 foreach ($k in $bPorts.Keys) { if (-not $aPorts.ContainsKey($k)) { Add-Finding 'warn' 'ports' 'closed' "Port binding disappeared: $k" } }
 
 # ------------------------------------------------------------------ events
+# Localized LevelDisplayName values are matched without embedding non-ASCII
+# literals, so this script stays ANSI-safe when PowerShell 5.1 reads it.
+$rxLevelError = 'Error|Critical|' + [char]0x9519 + [char]0x8BEF
+$rxLevelWarn = 'Warning|' + [char]0x8B66 + [char]0x544A
+
 $bEventKeys = @{}
 foreach ($e in $b.events) { $bEventKeys[("{0}|{1}|{2}" -f $e.log, $e.id, $e.timeCreated)] = $true }
 foreach ($e in $a.events) {
   $k = "{0}|{1}|{2}" -f $e.log, $e.id, $e.timeCreated
   if ($bEventKeys.ContainsKey($k)) { continue }
   $sev = 'info'
-  if ($e.level -match 'Error|Critical|错误') { $sev = 'error' }
-  elseif ($e.level -match 'Warning|警告') { $sev = 'warn' }
+  if ($e.level -match $rxLevelError) { $sev = 'error' }
+  elseif ($e.level -match $rxLevelWarn) { $sev = 'warn' }
   $msg = [string]$e.message
   if ($msg.Length -gt 240) { $msg = $msg.Substring(0, 240) + '...' }
   Add-Finding $sev 'eventlog' 'new-event' ("{0} / {1} / ID {2} / {3}: {4}" -f $e.log, $e.source, $e.id, $e.level, $msg)
