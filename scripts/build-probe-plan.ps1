@@ -319,9 +319,12 @@ if ($str -and $str.evidence -and $str.evidence.registry) {
   if ($pf -and $pf.product -and $pf.product.name) { $appTokens += [string]$pf.product.name }
   $appTokenRx = if ($appTokens.Count -gt 0) { '(?i)(' + (($appTokens | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')' } else { $null }
   $noiseRx = '(?i)^(Software|SOFTWARE)\\(Microsoft|Intel|Khronos|Policies|Google|NVIDIA)\\'
+  # Autostart and uninstall keys are app-relevant even though they live under
+  # Microsoft\Windows; do not let the noise filter swallow them.
+  $relevantRx = '(?i)^(Software|SOFTWARE)\\Microsoft\\Windows\\CurrentVersion\\(Run|RunOnce|Uninstall)'
   foreach ($rp in @($str.evidence.registry | Select-Object -First 40)) {
     $text = [string]$rp
-    if ($text -match $noiseRx -and -not ($appTokenRx -and $text -match $appTokenRx)) { continue }
+    if ($text -match $noiseRx -and $text -notmatch $relevantRx -and -not ($appTokenRx -and $text -match $appTokenRx)) { continue }
     if ($text -match '^(?i)(HKEY_|HKLM|HKCU|HKCR|HKU|HKCC)\\') {
       Add-RegTarget $text 'registry path mined from the binary'
       continue
