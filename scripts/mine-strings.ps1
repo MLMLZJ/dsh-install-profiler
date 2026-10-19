@@ -77,6 +77,9 @@ $rxEvent    = New-Rx '(?i)(event ?log|eventsource|eventmessagefile|\betw\b|provi
 $rxService  = New-Rx '(?i)(^SERVICE_[A-Z_]+$|service\.exe$|^[a-z0-9_.-]*svc[a-z0-9_.-]*$)'
 $rxMutex    = New-Rx '(?i)^(Global|Local)\\|\bmutex\b'
 $rxError    = New-Rx '(?i)\b(error|failed|failure|denied|invalid|cannot|unable|timeout|unauthorized)\b'
+# One combined pre-filter so marker detection costs one regex call per run
+# instead of seven function calls (that difference was 10 s vs 130 s on 430k runs).
+$rxMarker   = New-Rx '(?i)(PyInstaller|_MEIPASS|pyiboot|pyi-contents|app\.asar|chrome_100_percent|mscoree|System\.Runtime|BSJB|\.NET Framework|UPX!|UPX0|UPX1|Nullsoft|Inno Setup|VMProtect|Themida|Enigma Protector|\.vmp)'
 
 # --------------------------------------------------------------- file list
 $targets = @()
@@ -197,7 +200,27 @@ foreach ($f in $targets) {
     })
 }
 
+# Marker detection runs over every unique run, not over the capped category
+# lists, so a marker is never lost just because that bucket filled up first.
+$mk = @{ dotnet = $false; electron = $false; pyi = $false; upx = $false; nsis = $false; inno = $false; prot = $false }
+$pendingMarkers = 7
+function Test-Any([string]$Value, [string[]]$Needles) {
+  foreach ($n in $Needles) {
+    if ($Value.IndexOf($n, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+  }
+  return $false
+}
+
 foreach ($s in $unique) {
+  if ($pendingMarkers -gt 0 -and $s.Length -le 128 -and $rxMarker.IsMatch($s)) {
+    if (-not $mk.pyi -and (Test-Any $s @('PyInstaller', '_MEIPASS', 'pyiboot', 'pyi-contents'))) { $mk.pyi = $true; $pendingMarkers-- }
+    if (-not $mk.electron -and (Test-Any $s @('app.asar', 'chrome_100_percent'))) { $mk.electron = $true; $pendingMarkers-- }
+    if (-not $mk.dotnet -and (Test-Any $s @('mscoree', 'System.Runtime', 'BSJB', '.NET Framework'))) { $mk.dotnet = $true; $pendingMarkers-- }
+    if (-not $mk.upx -and (Test-Any $s @('UPX!', 'UPX0', 'UPX1'))) { $mk.upx = $true; $pendingMarkers-- }
+    if (-not $mk.nsis -and (Test-Any $s @('Nullsoft'))) { $mk.nsis = $true; $pendingMarkers-- }
+    if (-not $mk.inno -and (Test-Any $s @('Inno Setup'))) { $mk.inno = $true; $pendingMarkers-- }
+    if (-not $mk.prot -and (Test-Any $s @('VMProtect', 'Themida', 'Enigma Protector', '.vmp'))) { $mk.prot = $true; $pendingMarkers-- }
+  }
   if ($s.Length -lt 6 -or $s.Length -gt 300) { continue }
   $alnum = 0
   foreach ($ch in $s.ToCharArray()) { if ([char]::IsLetterOrDigit($ch)) { $alnum++ } }
@@ -211,16 +234,9 @@ $counts = [ordered]@{}
 foreach ($k in $cats.Keys) { $counts[$k] = $cats[$k].Count }
 
 # ------------------------------------------------------------ marker check
-$markers = [ordered]@{ dotnetClr = $false; electron = $false; pyinstaller = $false; upx = $false; nsis = $false; inno = $false; protected = $false }
-$all = @($cats.other) + @($cats.paths) + @($cats.services)
-foreach ($s in $all) {
-  if ($s -match 'mscoree|System\.Runtime|BSJB|\.NET Framework') { $markers.dotnetClr = $true }
-  if ($s -match 'app\.asar|chrome_100_percent') { $markers.electron = $true }
-  if ($s -match 'PyInstaller|_MEIPASS') { $markers.pyinstaller = $true }
-  if ($s -match '^UPX[0-9!]') { $markers.upx = $true }
-  if ($s -match 'Nullsoft') { $markers.nsis = $true }
-  if ($s -match 'Inno Setup') { $markers.inno = $true }
-  if ($s -match '(?i)VMProtect|Themida|\.vmp[0-9]|Enigma Protector|obsidium') { $markers.protected = $true }
+$markers = [ordered]@{
+  dotnetClr = $mk.dotnet; electron = $mk.electron; pyinstaller = $mk.pyi
+  upx = $mk.upx; nsis = $mk.nsis; inno = $mk.inno; protected = $mk.prot
 }
 
 # -------------------------------------------------------------- evidence

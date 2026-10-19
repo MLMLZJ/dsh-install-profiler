@@ -27,6 +27,7 @@ export function apply(ctx) {
         'registry writes, services/drivers, scheduled tasks, config files, log locations and Event Log sources; mine a binary for ' +
         'registry paths, log paths and error templates when there is no MSI database; then turn that static map ' +
         'into a targeted dynamic probe (paths, registry keys, services, event IDs, Procmon filters), diff before/after snapshots, ' +
+        'hand the evidence to reverse-engineering when the installer is itself an application, ' +
         'and diagnose install/startup/runtime faults with the mechanism behind each fix. ' +
         '安装包画像与故障排查：注册表、安装位置、服务、日志、事件源、配置项，静态画像驱动动态取证，以及故障定位与修复原理。',
       whenToUse:

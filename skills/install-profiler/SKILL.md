@@ -117,11 +117,18 @@ Rules that keep it honest:
 
 ## Optional deeper analysis: when the installer is itself an application
 
-A .NET bootstrap, an Electron/Squirrel app, or a native loader may not reveal its config keys, log paths or error strings through strings alone.
+A .NET bootstrap, an Electron/Squirrel app, or a native loader may not reveal its config keys, log paths or error strings through strings alone. Package the handoff instead of writing a vague note:
 
-- **If the `reverse-engineering` skill is installed**, load it and use its branches: Branch D (.NET → `ilspycmd -p -o <out>`), Branch E (Electron → `asar extract`), Branch C (native → `objdump -x` / `rizin`). Use that skill's own probe to confirm the decompiler exists before promising output.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "<skill base>\scripts\build-handoff.ps1" `
+  -Target <exe-or-dir> [-Profile <profile.json>] [-ProbePlan <probe-plan.json>] [-Strings <strings-evidence.json>] -OutDir <dest>
+```
+
+It classifies the target (dotnet / electron / pyinstaller / native, plus packed), lists the facts already established, turns the gaps into branch-specific questions, emits the exact decompile commands with tool availability, and writes `handoff.md` (paste-ready) + `handoff.json`. The brief forbids redoing the profiling and requires `[verified]/[inferred]/[unknown]` tags with file/method evidence.
+
+- **If the `reverse-engineering` skill is installed**, paste `handoff.md` into that session and let it work.
 - **If it is not installed**, stop at strings evidence and mark every internal-behaviour claim `[inferred]`. Do not install decompilers silently.
-- **One skill, one job**: `install-profiler` decides *what to observe*; `reverse-engineering` decides *how to read the code*. Hand over the `profile.json` and `probe-plan.json` so the second skill does not redo discovery.
+- **One skill, one job**: `install-profiler` decides *what to observe*; `reverse-engineering` decides *how to read the code*. The handoff carries `profile.json` + `probe-plan.json` so the second skill does not redo discovery.
 - Licensing applies to both: reading an authorized copy for diagnostics is fine; using decompilation to bypass licensing, activation or DRM is refused.
 
 ## Step 4 — build the profile (MSI: authoritative)

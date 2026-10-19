@@ -18,7 +18,7 @@ C:\Tools\dsh-install-profiler
 > 重要：`install_bundle` 对本地目录采用 **link（链接）** 方式安装，不是复制。
 > 装完之后这个目录必须保留；删掉或改名会导致插件失效（技能从目录中消失）。
 
-解压后目录里应该直接是 `package.json`、`cordis.patch.yml`、`index.js`、`scripts\`、`skills\` 等，共 22 个文件。
+解压后目录里应该直接是 `package.json`、`cordis.patch.yml`、`index.js`、`scripts\`、`skills\` 等，共 23 个文件。
 
 ## 3. 在目标 DSH 里安装
 
@@ -90,7 +90,7 @@ dsh --profile <profile名>
 | 安装后技能不出现 | 确认 `application` 是 `applied`；检查会话是否有 Full access |
 | 技能消失 | 源目录被移动/删除（link 方式安装），把它放回原路径或重新安装 |
 | 脚本执行被策略拦截 | 技能里已统一用 `powershell -NoProfile -ExecutionPolicy Bypass -File …` 调用 |
-| 解压后文件数不对 | 用 `Expand-Archive` 或 7-Zip 重新解压；应为 22 个文件 |
+| 解压后文件数不对 | 用 `Expand-Archive` 或 7-Zip 重新解压；应为 23 个文件 |
 
 ## 9. 内容清单
 
@@ -105,6 +105,7 @@ skills\install-profiler\assets\profile.schema.json
 scripts\probe-tools.ps1
 scripts\detect-installer.ps1
 scripts\mine-strings.ps1
+scripts\build-handoff.ps1
 scripts\export-msi-tables.ps1
 scripts\collect-state.ps1
 scripts\build-probe-plan.ps1

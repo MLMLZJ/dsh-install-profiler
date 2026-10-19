@@ -37,7 +37,9 @@ The two skills are complementary, not overlapping:
 - **`install-profiler`** answers *what should be observed* — install layout, registry, services, logs, event sources, and which of them to watch at runtime.
 - **`reverse-engineering`** answers *how to read the code* — .NET (`ilspycmd`), Electron (`asar`), native (`objdump`/`rizin`/Ghidra).
 
-When an installer is itself a .NET bootstrap or an Electron/Squirrel app and strings are not enough, hand over with `profile.json` + `probe-plan.json` so the second skill does not redo discovery. `mine-strings.ps1` covers the common case without needing any decompiler; its output is evidence of capability, not proof of behaviour.
+When an installer is itself a .NET bootstrap or an Electron/Squirrel app and strings are not enough, `build-handoff.ps1` packages the handoff: it classifies the branch (dotnet / electron / pyinstaller / native / packed), lists the facts already established, turns the gaps into branch-specific questions, emits the exact decompile commands with tool availability, and writes `handoff.md` + `handoff.json`. The receiving skill is told not to redo discovery and to tag every answer `[verified]/[inferred]/[unknown]`.
+
+`mine-strings.ps1` covers the common case without needing any decompiler; its output is evidence of capability, not proof of behaviour.
 
 ## The loop: static map → dynamic probe
 
@@ -71,6 +73,7 @@ folders.
 | `scripts/probe-tools.ps1` | Which extractor/inspector tools exist (read-only, ~2 s) |
 | `scripts/detect-installer.ps1` | Classify the package + emit the extraction plan |
 | `scripts/mine-strings.ps1` | No MSI database? Mine registry paths, log paths, services, URLs, GUIDs and error templates out of the binary (ASCII + UTF-16LE) |
+| `scripts/build-handoff.ps1` | Package the evidence into a paste-ready brief for the reverse-engineering skill: branch, established facts, questions, commands, evidence contract |
 | `scripts/export-msi-tables.ps1` | MSI tables → JSON/CSV + derived profile |
 | `scripts/collect-state.ps1` | Read-only runtime snapshot for an installed app |
 | `scripts/build-probe-plan.ps1` | Static profile → targeted dynamic-observation plan |
@@ -124,6 +127,9 @@ scripts/*.ps1                the four tools
 - `collect-state` on an installed app → uninstall entry, data dir, log files,
   pending-reboot flag.
 - `mine-strings` on `7zFM.exe` → 4239 unique runs in 1 s, recovered `Software\7-Zip\FM\Columns` and the shell-extension key without any decompiler; on a 30 MB self-extracting installer it runs in ~8 s and correctly yields little, because the payload is compressed (the doc says to extract first).
+- `build-handoff` on a PyInstaller bundle → branch `pyinstaller`, 7 targeted
+  questions, tool readiness (`pyi-archive_viewer`, `python`), SHA256 of the main
+  executable; on `7zFM.exe` → `native` branch with objdump/rizin availability.
 - `build-probe-plan` on the Acrobat profile → 85 watched paths (logical MSI
   directories resolved to real ones, incl. `ProgramFilesFolder` → `C:\Program
   Files`), 300 registry keys, 1 service with expected state, 32 process names,
