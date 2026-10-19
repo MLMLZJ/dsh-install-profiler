@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-install-profiler",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Toggleable installer-profiling, dynamic probing and fault-diagnosis skill for DeepSeek Harness agents.",
   "type": "module",

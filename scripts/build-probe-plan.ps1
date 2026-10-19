@@ -34,31 +34,47 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true, Position = 0)]
   [string]$Profile,
-
   [string]$State,
+  [string]$Strings,
+  [string]$AppDir,
   [string]$OutDir = '.\probe-plan'
 )
 
 $ErrorActionPreference = 'Stop'
-$ToolVersion = '1.0.0'
+$ToolVersion = '1.1.0'
 
-if (-not (Test-Path -LiteralPath $Profile)) {
-  [ordered]@{ tool = 'build-probe-plan'; status = 'error'; message = "Profile not found: $Profile" } | ConvertTo-Json
-  exit 2
-}
 $OutDir = [IO.Path]::GetFullPath($OutDir)
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-$pf = Get-Content -LiteralPath $Profile -Raw -Encoding UTF8 | ConvertFrom-Json
-$st = $null
-if ($State -and (Test-Path -LiteralPath $State)) {
-  $st = Get-Content -LiteralPath $State -Raw -Encoding UTF8 | ConvertFrom-Json
+function Read-JsonFile([string]$File) {
+  if (-not $File) { return $null }
+  if (-not (Test-Path -LiteralPath $File)) { return $null }
+  try { return (Get-Content -LiteralPath $File -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
+$pf = Read-JsonFile $Profile
+$st = Read-JsonFile $State
+$str = Read-JsonFile $Strings
+$appRoot = $null
+if ($AppDir -and (Test-Path -LiteralPath $AppDir)) { $appRoot = (Resolve-Path -LiteralPath $AppDir).Path }
+
+$inputWarnings = New-Object System.Collections.Generic.List[string]
+if ($Profile -and -not $pf) { $inputWarnings.Add("Profile not readable: $Profile") }
+if ($State -and -not $st) { $inputWarnings.Add("State not readable: $State") }
+if ($Strings -and -not $str) { $inputWarnings.Add("Strings evidence not readable: $Strings") }
+if ($AppDir -and -not $appRoot) { $inputWarnings.Add("AppDir not found: $AppDir") }
+
+if ($null -eq $pf -and $null -eq $st -and $null -eq $str -and -not $appRoot) {
+  [ordered]@{
+    tool = 'build-probe-plan'; status = 'error'
+    message = 'Nothing to plan from: pass at least one of -Profile, -State, -Strings or -AppDir. -AppDir covers portable / PyInstaller / Electron apps that have no MSI.'
+  } | ConvertTo-Json
+  exit 2
 }
 
 # ------------------------------------------------------------ folder mapping
-$arch = [string]$pf.product.architecture
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$arch = if ($pf -and $pf.product) { [string]$pf.product.architecture } else { 'x64' }
 $is64Os = [Environment]::Is64BitOperatingSystem
 $x86Base = if ($is64Os -and ${env:ProgramFiles(x86)}) { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
 $programFiles = if ($arch -eq 'x86' -and $is64Os) { $x86Base } else { $env:ProgramFiles }
@@ -176,6 +192,37 @@ if ($pf.installPaths) {
   }
 }
 
+# ------------------------------------------- application directory (non-MSI)
+if ($appRoot) {
+  if (-not $seenReal.ContainsKey($appRoot)) {
+    $seenReal[$appRoot] = $true
+    $pathTargets.Add([pscustomobject][ordered]@{
+        dirId = 'APPROOT'; logical = $appRoot; real = $appRoot; mapped = $true
+        exists = $true; role = 'install-root'; reason = 'application directory supplied with -AppDir'
+      })
+  }
+  foreach ($d in (Get-ChildItem -LiteralPath $appRoot -Directory -ErrorAction SilentlyContinue | Select-Object -First 40)) {
+    if ($d.Name -notmatch '(?i)(log|data|config|cache|temp|user|rules|kb|tools|source|internal)') { continue }
+    if ($seenReal.ContainsKey($d.FullName)) { continue }
+    $seenReal[$d.FullName] = $true
+    $pathTargets.Add([pscustomobject][ordered]@{
+        dirId = $d.Name; logical = $d.FullName; real = $d.FullName; mapped = $true
+        exists = $true; role = 'data-or-log'; reason = 'subdirectory name suggests config/log/data storage'
+      })
+  }
+}
+if ($st -and $st.directories) {
+  foreach ($d in $st.directories) {
+    $rp = [string]$d.path
+    if (-not $rp -or $seenReal.ContainsKey($rp)) { continue }
+    $seenReal[$rp] = $true
+    $pathTargets.Add([pscustomobject][ordered]@{
+        dirId = $null; logical = $rp; real = $rp; mapped = $true
+        exists = [bool]$d.exists; role = 'data-or-log'; reason = 'directory observed by collect-state'
+      })
+  }
+}
+
 # --------------------------------------------------------------- services
 $serviceTargets = New-Object System.Collections.Generic.List[object]
 if ($pf.services) {
@@ -197,6 +244,28 @@ if ($pf.services) {
         currentStartMode = if ($live) { [string]$live.StartMode } else { $null }
         currentAccount   = if ($live) { [string]$live.StartName } else { $null }
         currentBinary    = if ($live) { [string]$live.PathName } else { $null }
+      })
+  }
+}
+if ($st -and $st.services) {
+  foreach ($s in $st.services) {
+    $svcName = [string]$s.name
+    if (-not $svcName) { continue }
+    $already = $false
+    foreach ($existing in $serviceTargets) { if ($existing.name -eq $svcName) { $already = $true; break } }
+    if ($already) { continue }
+    $serviceTargets.Add([pscustomobject][ordered]@{
+        name             = $svcName
+        displayName      = [string]$s.displayName
+        expectedStart    = [string]$s.startMode
+        expectedStartRaw = $null
+        expectedAccount  = [string]$s.startName
+        binaryPath       = [string]$s.pathName
+        installed        = $true
+        currentState     = [string]$s.state
+        currentStartMode = [string]$s.startMode
+        currentAccount   = [string]$s.startName
+        currentBinary    = [string]$s.pathName
       })
   }
 }
@@ -240,6 +309,13 @@ if ($pf.registry) {
 }
 foreach ($s in $serviceTargets) {
   if ($s.name) { Add-RegTarget ("HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\" + $s.name) 'service (derived)' }
+}
+if ($str -and $str.evidence -and $str.evidence.registry) {
+  foreach ($rp in @($str.evidence.registry | Select-Object -First 40)) {
+    $text = [string]$rp
+    if ($text -notmatch '^(?i)(HKEY_|HKLM|HKCU|HKCR|HKU|HKCC)\\') { continue }
+    Add-RegTarget $text 'registry path mined from the binary'
+  }
 }
 
 # --------------------------------------------------------------- event log
@@ -304,6 +380,18 @@ foreach ($f in $fileRows) {
     $configFiles += $pth
   }
 }
+if ($appRoot) {
+  foreach ($exe in (Get-ChildItem -LiteralPath $appRoot -Filter *.exe -File -ErrorAction SilentlyContinue | Select-Object -First 20)) {
+    $base = [IO.Path]::GetFileNameWithoutExtension($exe.Name)
+    if ($processNames -notcontains $base) { $processNames += $base }
+    if ($binaryCandidates -notcontains $exe.FullName) { $binaryCandidates += $exe.FullName }
+  }
+  foreach ($cfg in (Get-ChildItem -LiteralPath $appRoot -File -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+      Where-Object { $_.Extension -match '(?i)^\.(ini|json|xml|config|cfg|conf|yaml|yml|properties)$' } |
+      Select-Object -First 40)) {
+    if ($configFiles -notcontains $cfg.FullName) { $configFiles += $cfg.FullName }
+  }
+}
 $processNames = @($processNames | Select-Object -First 40)
 $configFiles = @($configFiles | Select-Object -First 40)
 
@@ -333,11 +421,25 @@ if ($st -and $st.logFiles) {
 
 # ------------------------------------------------------------------ checks
 $checks = New-Object System.Collections.Generic.List[object]
-$checks.Add([pscustomobject][ordered]@{
-    id = 'profile-source'; description = 'The profile was built from the expected package'; command = 'compare source.sha256 with the installer'; expect = 'match'
-  })
+if ($pf) {
+  $checks.Add([pscustomobject][ordered]@{
+      id = 'profile-source'; description = 'The profile was built from the expected package'; command = 'compare source.sha256 with the installer'; expect = 'match'
+    })
+}
+if ($appRoot) {
+  $checks.Add([pscustomobject][ordered]@{
+      id = 'app-root'; description = "Application directory exists: $appRoot"; command = "Test-Path -LiteralPath `"$appRoot`""; expect = 'True'
+    })
+  $mainExe = Get-ChildItem -LiteralPath $appRoot -Filter *.exe -File -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
+  if ($mainExe) {
+    $checks.Add([pscustomobject][ordered]@{
+        id = 'app-main-exe'; description = "Main executable present: $($mainExe.Name)"; command = "Test-Path -LiteralPath `"$($mainExe.FullName)`""; expect = 'True'
+      })
+  }
+}
 foreach ($p in $pathTargets) {
   if ($p.role -ne 'install-root') { continue }
+  if ($p.dirId -eq 'APPROOT') { continue }   # already covered by the app-root check
   $checks.Add([pscustomobject][ordered]@{
       id = 'path-' + ($p.dirId -replace '[^A-Za-z0-9]', '_')
       description = "Install root exists: $($p.real)"
@@ -366,7 +468,7 @@ foreach ($c in ($configFiles | Select-Object -First 10)) {
       id = 'cfg-' + ([IO.Path]::GetFileNameWithoutExtension($c) -replace '[^A-Za-z0-9]', '_')
       description = "Config file present: $c"
       command = 'Test-Path / read default values'
-      expect = 'file exists and is readable by the service account'
+      expect = 'file exists and is readable by the account that runs the app'
     })
 }
 
@@ -408,8 +510,13 @@ $plan = [ordered]@{
   tool        = 'build-probe-plan'
   toolVersion = $ToolVersion
   generated   = (Get-Date).ToString('o')
-  source      = [ordered]@{ profile = (Resolve-Path -LiteralPath $Profile).Path; state = if ($State) { (Resolve-Path -LiteralPath $State).Path } else { $null } }
-  product     = $pf.product
+  source      = [ordered]@{
+    profile = if ($Profile -and (Test-Path -LiteralPath $Profile)) { (Resolve-Path -LiteralPath $Profile).Path } else { $null }
+    state   = if ($State -and (Test-Path -LiteralPath $State)) { (Resolve-Path -LiteralPath $State).Path } else { $null }
+    strings = if ($Strings -and (Test-Path -LiteralPath $Strings)) { (Resolve-Path -LiteralPath $Strings).Path } else { $null }
+    appDir  = $appRoot
+  }
+  product     = if ($pf) { $pf.product } else { [ordered]@{ name = (Split-Path -Leaf $appRoot); version = $null; architecture = $arch } }
   targetMachine = [ordered]@{
     name = $env:COMPUTERNAME; os = [string]$env:OS; psVersion = $PSVersionTable.PSVersion.ToString()
     is64BitOs = $is64Os; programFiles = $programFiles
@@ -426,10 +533,11 @@ $plan = [ordered]@{
   procmonFilters = $procmonArr
   reproduction = $reproduction
   notes = @(
-    'Registry paths come from the MSI Registry table; values may contain [PROPERTY] placeholders that resolve only during install.',
+    'Registry paths come from the MSI Registry table (or from mined binary strings when there is no MSI); values may contain [PROPERTY] placeholders that resolve only during install.',
     'binaryPath in services is logical until resolved on the machine; confirm with sc.exe qc.',
-    'A "before" snapshot taken without the app installed is still useful: diff it against "after install" to capture first-run writes.'
-  )
+    'A "before" snapshot taken without the app installed is still useful: diff it against "after install" to capture first-run writes.',
+    $(if ($appRoot -and -not $pf) { 'No MSI profile was supplied: this plan is built from the application directory and optional strings/state evidence. Paths are direct machine paths, not MSI logical paths.' } else { 'Plan built from an MSI profile.' })
+  ) + $inputWarnings.ToArray()
 }
 
 $planPath = Join-Path $OutDir 'probe-plan.json'
@@ -437,9 +545,14 @@ $plan | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $planPath -Encoding 
 
 # human-readable plan
 $md = New-Object System.Text.StringBuilder
-[void]$md.AppendLine("# Dynamic probe plan - $($pf.product.name) $($pf.product.version)")
+[void]$md.AppendLine("# Dynamic probe plan - " + ([string]$plan.product.name).Trim() + $(if ($plan.product.version) { ' ' + $plan.product.version } else { '' }))
 [void]$md.AppendLine('')
-[void]$md.AppendLine("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  |  source profile: ``$Profile``")
+$srcParts = @()
+if ($plan.source.profile) { $srcParts += "profile=$($plan.source.profile)" }
+if ($plan.source.state) { $srcParts += "state=$($plan.source.state)" }
+if ($plan.source.strings) { $srcParts += "strings=$($plan.source.strings)" }
+if ($plan.source.appDir) { $srcParts += "appDir=$($plan.source.appDir)" }
+[void]$md.AppendLine("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  |  sources: " + ($srcParts -join ' ; '))
 [void]$md.AppendLine('')
 [void]$md.AppendLine('## 1. Watch these paths')
 [void]$md.AppendLine('')
@@ -494,7 +607,7 @@ $md.ToString() | Set-Content -LiteralPath $mdPath -Encoding UTF8
   outDir      = $OutDir
   plan        = $planPath
   readme      = $mdPath
-  product     = "$($pf.product.name) $($pf.product.version)"
+  product     = ("$($plan.product.name) $($plan.product.version)").Trim()
   counts      = [ordered]@{
     paths = $pathTargets.Count; registry = $regTargets.Count; services = $serviceTargets.Count
     processes = $processNames.Count; eventQueries = $eventQueries.Count; checks = $checks.Count

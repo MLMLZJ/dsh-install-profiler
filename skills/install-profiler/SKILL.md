@@ -121,7 +121,7 @@ A .NET bootstrap, an Electron/Squirrel app, or a native loader may not reveal it
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<skill base>\scripts\build-handoff.ps1" `
-  -Target <exe-or-dir> [-Profile <profile.json>] [-ProbePlan <probe-plan.json>] [-Strings <strings-evidence.json>] -OutDir <dest>
+  -Target <exe-or-dir> [-Profile <profile.json>] [-ProbePlan <probe-plan.json>] [-Strings <strings-evidence.json>] [-State <state.json>] -OutDir <dest>
 ```
 
 It classifies the target (dotnet / electron / pyinstaller / native, plus packed), lists the facts already established, turns the gaps into branch-specific questions, emits the exact decompile commands with tool availability, and writes `handoff.md` (paste-ready) + `handoff.json`. The brief forbids redoing the profiling and requires `[verified]/[inferred]/[unknown]` tags with file/method evidence.
@@ -159,11 +159,14 @@ Compare the runtime state against the profile: a service registered by the MSI b
 
 ## Step 6 — turn the profile into a dynamic probe
 
-Static facts say what *should* happen; the fault lives in what *actually* happens. Do not guess what to watch — derive it from the profile:
+Static facts say what *should* happen; the fault lives in what *actually* happens. Do not guess what to watch — derive it from the evidence you have:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "<skill base>\scripts\build-probe-plan.ps1" -Profile <profile.json> [-State <state.json>] -OutDir <dest>
+powershell -NoProfile -ExecutionPolicy Bypass -File "<skill base>\scripts\build-probe-plan.ps1" `
+  [-Profile <profile.json>] [-AppDir <app-directory>] [-State <state.json>] [-Strings <strings-evidence.json>] -OutDir <dest>
 ```
+
+At least one source is required. MSI packages use `-Profile`. Portable, PyInstaller and Electron apps have no MSI — use `-AppDir` plus whatever `collect-state` and `mine-strings` produced; the plan then watches real machine paths instead of MSI logical ones. Mixing sources is expected: `-AppDir` for the tree, `-State` for the data directories that only exist at runtime, `-Strings` for registry keys mined from the binary.
 
 It emits `probe-plan.json` + `probe-plan.md` naming, concretely:
 

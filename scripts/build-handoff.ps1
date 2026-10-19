@@ -42,6 +42,7 @@ param(
   [string]$Profile,
   [string]$ProbePlan,
   [string]$Strings,
+  [string]$State,
   [string]$OutDir = '.\handoff'
 )
 
@@ -62,6 +63,7 @@ function Read-Json([string]$Path) {
 $pf = Read-Json $Profile
 $plan = Read-Json $ProbePlan
 $str = Read-Json $Strings
+$st = Read-Json $State
 
 # ---------------------------------------------------------------- classify
 $targetItem = Get-Item -LiteralPath $Target
@@ -196,6 +198,26 @@ if ($plan) {
 if ($str -and $str.counts) {
   $known.Add([pscustomobject][ordered]@{ area = 'strings'; fact = ("registry={0} paths={1} logs={2} services={3} urls={4}" -f $str.counts.registry, $str.counts.paths, $str.counts.logFiles, $str.counts.services, $str.counts.urls) })
 }
+if ($st) {
+  if ($st.uninstall) {
+    foreach ($u in @($st.uninstall | Select-Object -First 3)) {
+      $known.Add([pscustomobject][ordered]@{ area = 'uninstall-entry'; fact = "$($u.displayName) $($u.displayVersion) at $($u.installLocation)" })
+    }
+  }
+  if ($st.directories) {
+    foreach ($d in @($st.directories | Select-Object -First 5)) {
+      $known.Add([pscustomobject][ordered]@{ area = 'runtime-dir'; fact = "$($d.path) (files=$($d.fileCount))" })
+    }
+  }
+  if ($st.services) {
+    foreach ($s in @($st.services | Select-Object -First 5)) {
+      $known.Add([pscustomobject][ordered]@{ area = 'runtime-service'; fact = "$($s.name) state=$($s.state) start=$($s.startMode)" })
+    }
+  }
+  if ($st.logFiles) {
+    $known.Add([pscustomobject][ordered]@{ area = 'log-files'; fact = ("{0} log-like files observed" -f @($st.logFiles).Count) })
+  }
+}
 
 # ------------------------------------------------------------------ questions
 $questions = New-Object 'System.Collections.Generic.List[string]'
@@ -278,6 +300,7 @@ $result = [ordered]@{
     profile = if ($Profile) { (Resolve-Path -LiteralPath $Profile).Path } else { $null }
     probePlan = if ($ProbePlan) { (Resolve-Path -LiteralPath $ProbePlan).Path } else { $null }
     strings = if ($Strings) { (Resolve-Path -LiteralPath $Strings).Path } else { $null }
+    state = if ($State) { (Resolve-Path -LiteralPath $State).Path } else { $null }
   }
   knownFacts  = $known.ToArray()
   questions   = $questions.ToArray()
@@ -322,7 +345,7 @@ else {
 [void]$md.AppendLine('')
 [void]$md.AppendLine('## 3. Input files')
 [void]$md.AppendLine('')
-foreach ($k in @('profile', 'probePlan', 'strings')) {
+foreach ($k in @('profile', 'probePlan', 'strings', 'state')) {
   $v = $result.inputs[$k]
   if ($v) { [void]$md.AppendLine("- $k : ``$v``") }
 }

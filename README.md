@@ -65,6 +65,10 @@ service's expected start type/account against its live state, names the process
 names and config/log candidates, emits Event Log providers/IDs and Procmon filter
 expressions, and produces a check list with the command and expectation for each.
 
+MSI packages feed it `-Profile`. Portable, PyInstaller and Electron apps have no
+MSI: feed it `-AppDir` plus the `collect-state` / `mine-strings` output, and the
+plan is built from real machine paths and runtime-discovered directories instead.
+
 `diff-snapshots` ranks what moved: files added/removed/modified under watched
 paths, registry values created/changed/deleted, service state changes, processes
 appearing/exiting, ports opening/closing, new Event Log entries, new WER crash
