@@ -202,16 +202,25 @@ Then verify with the specific command for that layer before proposing a fix. A f
 
 ## Output contract
 
-The deliverable is written for the person who has to fix the machine, not for the analyst:
+The deliverable is a **complete operations sheet** for the person who has to fix the machine. Frontline ops needs everything that was captured, not a summary — the structure keeps it usable:
 
-1. **Section 0 is a one-page quick reference** — product/version, install dir, main exe, data dirs, log path, service + account + start type, autostart, event source, uninstall command, signature.
-2. **Section 1 is a numbered triage order with paste-ready commands** — dir/exe → process → newest log tail → 24 h crash/service events → service config → port → config/registry last.
-3. **Section 2 is a symptom → evidence → cause → action table.**
-4. Full inventories (every file, every registry row) go in the appendix, never at the top.
+```powershell
+build-ops-sheet.ps1 -State <state.json> [-Profile <profile.json>] [-Plan <probe-plan.json>] [-Strings <strings-evidence.json>] [-Detect <detect.json>] -OutDir <dest>
+```
 
-`build-probe-plan` also writes `ops-card.md`: the same paste-ready checks generated from the actual paths and service names of this product. Prefer copying its commands verbatim over retyping them.
+It assembles one document with every item captured: identity (product/version/installer type/signature/hash/size/pending reboot), all install locations, **every uninstall entry with all of its registry values**, **every service with its full service registry key**, drivers, scheduled tasks, **all Run/RunOnce entries split into app-related vs other-host context (unusual paths flagged)**, every observed log file plus newest files per directory, config files (content only with `-IncludeConfigContent`), Event Log sources with `EventMessageFile`, registry paths mined from the binary, and the MSI Registry table. It ends with the triage commands.
 
-Keep chat output bounded: summarize the top findings and point at files. Quote at most a few lines of raw tool output.
+The Chinese `report.md` must carry the same completeness, in this order:
+
+1. **一页速查** — product/version, install dir, main exe, data dirs, log path, service + account + start type, autostart, event source, uninstall command, signature.
+2. **排查顺序** — numbered, paste-ready commands (dir/exe → process → newest log tail → 24 h crash/service events → service config → startup → config/registry last).
+3. **症状对照表** — symptom → evidence → cause → action.
+4. **完整清单** — every captured path, registry key and value, service key, task, startup entry, log file, event source. Do not silently truncate: if a cap applies, print the total and say what is not shown.
+5. **故障分析** — only when the user reported a symptom.
+
+Never drop captured data to make the report shorter; move it to a later section instead. Keep chat output bounded (summarize, point at files), but the report itself is allowed to be long.
+
+## Known traps (learned the hard way)
 
 ## Known traps (learned the hard way)
 
