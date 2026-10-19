@@ -411,9 +411,22 @@ foreach ($f in $fileRows) {
   }
 }
 if ($appRoot) {
+  # Never present the uninstaller as the app process. Matching by the registered
+  # UninstallString is language-neutral (works for 卸载哔哩哔哩.exe too).
+  $uninstallerStems = @()
+  if ($st -and $st.uninstall) {
+    foreach ($u in $st.uninstall) {
+      $us = [string]$u.uninstallString
+      if ($us) {
+        $leaf = Split-Path -Leaf ($us.Trim('"'))
+        if ($leaf) { $uninstallerStems += [IO.Path]::GetFileNameWithoutExtension($leaf) }
+      }
+    }
+  }
   foreach ($exe in (Get-ChildItem -LiteralPath $appRoot -Filter *.exe -File -ErrorAction SilentlyContinue | Select-Object -First 20)) {
     $base = [IO.Path]::GetFileNameWithoutExtension($exe.Name)
     if ($base -match '(?i)^(uninstall|cuninst)') { continue }
+    if ($uninstallerStems -contains $base) { continue }
     if ($processNames -notcontains $base) { $processNames += $base }
     if ($binaryCandidates -notcontains $exe.FullName) { $binaryCandidates += $exe.FullName }
   }
@@ -648,11 +661,119 @@ foreach ($e in $eventQueries) {
 $mdPath = Join-Path $OutDir 'probe-plan.md'
 $md.ToString() | Set-Content -LiteralPath $mdPath -Encoding UTF8
 
+# ---------------------------------------------------------------- ops card
+# A one-page, copy-pasteable sheet for the person who actually has to fix the
+# machine at 2am: where things are, and the exact commands to check them.
+function Quote([string]$Value) { return "'" + ($Value -replace "'", "''") + "'" }
+$ops = New-Object System.Text.StringBuilder
+$productLabel = (([string]$plan.product.name).Trim() + ' ' + [string]$plan.product.version).Trim()
+[void]$ops.AppendLine('# Ops card - ' + $productLabel)
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('Generated: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  |  host: ' + $env:COMPUTERNAME)
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('## 1. Where everything is')
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('| What | Path | Size / exists |')
+[void]$ops.AppendLine('|---|---|---|')
+foreach ($p in $pathTargets) {
+  [void]$ops.AppendLine('| ' + $p.role + ' | `' + $p.real + '` | ' + $p.exists + ' |')
+}
+foreach ($s in $serviceTargets) {
+  [void]$ops.AppendLine('| service binary | `' + ([string]$s.binaryPath) + '` | ' + $s.installed + ' |')
+}
+if ($st -and $st.logFiles) {
+  $seenLogs = @{}
+  foreach ($l in @($st.logFiles)) {
+    $lp = [string]$l.path
+    if (-not $lp -or $seenLogs.ContainsKey($lp)) { continue }
+    if ($seenLogs.Count -ge 8) { break }
+    $seenLogs[$lp] = $true
+    [void]$ops.AppendLine('| log file | `' + $lp + '` | ' + [math]::Round([double]$l.sizeKB, 1) + ' KB |')
+  }
+}
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('## 2. Triage order (do it in this order)')
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('1. Does the install directory and main executable exist?')
+[void]$ops.AppendLine('2. Is the process running, and did it start recently?')
+[void]$ops.AppendLine('3. What does the newest log file say (tail, not head)?')
+[void]$ops.AppendLine('4. Did Windows log a crash or a service failure in the last 24 h?')
+[void]$ops.AppendLine('5. If it is a service: is it running, what account, does the binary exist?')
+[void]$ops.AppendLine('6. Only then look at registry/config differences.')
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('## 3. Copy-paste checks')
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('```powershell')
+[void]$ops.AppendLine('# --- 1. install layout ---')
+foreach ($p in @($pathTargets | Where-Object { $_.role -eq 'install-root' } | Select-Object -First 3)) {
+  [void]$ops.AppendLine('Test-Path -LiteralPath ' + (Quote $p.real))
+  [void]$ops.AppendLine('Get-ChildItem -LiteralPath ' + (Quote $p.real) + ' | Select-Object Name,Length,LastWriteTime | Sort-Object LastWriteTime -Descending | Select-Object -First 15')
+}
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('# --- 2. process ---')
+foreach ($n in @($processNames | Select-Object -First 5)) {
+  [void]$ops.AppendLine('Get-Process -Name ' + (Quote $n) + ' -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,StartTime,Responding,WorkingSet64')
+}
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('# --- 3. newest log lines (tail, not head) ---')
+foreach ($l in @($logArr | Select-Object -First 3)) {
+  $base = [string]$l.base
+  [void]$ops.AppendLine('if (Test-Path ' + (Quote $base) + ') { Get-ChildItem -LiteralPath ' + (Quote $base) + ' -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 5 FullName,Length,LastWriteTime }')
+}
+if ($st -and $st.logFiles) {
+  foreach ($lf in @($st.logFiles | Select-Object -First 2)) {
+    [void]$ops.AppendLine('Get-Content -LiteralPath ' + (Quote ([string]$lf.path)) + ' -Tail 40 -ErrorAction SilentlyContinue')
+  }
+}
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('# --- 4. crash / service events, last 24 h ---')
+[void]$ops.AppendLine('Get-WinEvent -FilterHashtable @{LogName=''Application''; StartTime=(Get-Date).AddHours(-24); Id=1000,1001,1002} -MaxEvents 30 -ErrorAction SilentlyContinue |')
+[void]$ops.AppendLine('  Select-Object TimeCreated,Id,ProviderName,Message | Format-List')
+[void]$ops.AppendLine('Get-WinEvent -FilterHashtable @{LogName=''System''; StartTime=(Get-Date).AddHours(-24); Id=7000,7001,7009,7031,7034} -MaxEvents 30 -ErrorAction SilentlyContinue |')
+[void]$ops.AppendLine('  Select-Object TimeCreated,Id,ProviderName,Message | Format-List')
+[void]$ops.AppendLine('')
+if ($serviceTargets.Count -gt 0) {
+  [void]$ops.AppendLine('# --- 5. services ---')
+  foreach ($s in $serviceTargets) {
+    [void]$ops.AppendLine('sc.exe qc ' + (Quote $s.name))
+    [void]$ops.AppendLine('sc.exe queryex ' + (Quote $s.name))
+  }
+  [void]$ops.AppendLine('')
+}
+[void]$ops.AppendLine('# --- 6. ports owned by the process ---')
+$firstProc = @($processNames | Select-Object -First 1)
+if ($firstProc.Count -gt 0) {
+  [void]$ops.AppendLine('$p = Get-Process -Name ' + (Quote $firstProc[0]) + ' -ErrorAction SilentlyContinue; if ($p) { Get-NetTCPConnection -OwningProcess $p.Id -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State }')
+}
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('# --- 7. uninstall / version info ---')
+[void]$ops.AppendLine('Get-ItemProperty ''HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'', ''HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'', ''HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'' -ErrorAction SilentlyContinue |')
+[void]$ops.AppendLine('  Where-Object { $_.DisplayName -like ''*' + ([string]$plan.product.name).Trim() + '*'' } | Select-Object DisplayName,DisplayVersion,InstallLocation,UninstallString | Format-List')
+[void]$ops.AppendLine('```')
+[void]$ops.AppendLine('')
+if ($regArr.Count -gt 0) {
+  [void]$ops.AppendLine('## 4. Registry keys to compare before/after')
+  [void]$ops.AppendLine('')
+  foreach ($r in @($regArr | Select-Object -First 12)) { [void]$ops.AppendLine('- `' + $r.psPath + '`  - ' + $r.reason) }
+  [void]$ops.AppendLine('')
+}
+[void]$ops.AppendLine('## 5. Before/after capture')
+[void]$ops.AppendLine('')
+[void]$ops.AppendLine('```powershell')
+[void]$ops.AppendLine('capture-snapshot.ps1 -Plan ' + (Quote (Join-Path $OutDir 'probe-plan.json')) + ' -Label before')
+[void]$ops.AppendLine('# ... reproduce the failure once ...')
+[void]$ops.AppendLine('capture-snapshot.ps1 -Plan ' + (Quote (Join-Path $OutDir 'probe-plan.json')) + ' -Label after -SinceMinutes 10')
+[void]$ops.AppendLine('diff-snapshots.ps1 -Before .\probe-snapshots\before.json -After .\probe-snapshots\after.json')
+[void]$ops.AppendLine('```')
+$opsPath = Join-Path $OutDir 'ops-card.md'
+$ops.ToString() | Set-Content -LiteralPath $opsPath -Encoding UTF8
+
 [ordered]@{
   status      = 'ok'
   outDir      = $OutDir
   plan        = $planPath
   readme      = $mdPath
+  opsCard     = $opsPath
   product     = ("$($plan.product.name) $($plan.product.version)").Trim()
   counts      = [ordered]@{
     paths = $pathTargets.Count; registry = $regTargets.Count; services = $serviceTargets.Count

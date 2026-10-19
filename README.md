@@ -64,6 +64,9 @@ registry keys worth snapshotting (ARP, services, EventLog, Run, COM), states eac
 service's expected start type/account against its live state, names the process
 names and config/log candidates, emits Event Log providers/IDs and Procmon filter
 expressions, and produces a check list with the command and expectation for each.
+It also writes **`ops-card.md`** — a one-page, copy-pasteable sheet for whoever is
+fixing the machine: where everything is, the triage order, and the exact commands
+for layout, process, log tail, crash events, service config, ports and uninstall.
 
 MSI packages feed it `-Profile`. Portable, PyInstaller and Electron apps have no
 MSI: feed it `-AppDir` plus the `collect-state` / `mine-strings` output, and the

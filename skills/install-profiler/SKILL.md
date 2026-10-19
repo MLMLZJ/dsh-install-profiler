@@ -202,7 +202,14 @@ Then verify with the specific command for that layer before proposing a fix. A f
 
 ## Output contract
 
-Deliver `report.md` following `assets/report-template.md`, plus the machine-readable `profile.json`/`state.json`. The report has: identity + hash + signature, install map, registry map, services, config/log/event map, fault analysis (symptom → evidence → mechanism → fix → verification), and residual unknowns.
+The deliverable is written for the person who has to fix the machine, not for the analyst:
+
+1. **Section 0 is a one-page quick reference** — product/version, install dir, main exe, data dirs, log path, service + account + start type, autostart, event source, uninstall command, signature.
+2. **Section 1 is a numbered triage order with paste-ready commands** — dir/exe → process → newest log tail → 24 h crash/service events → service config → port → config/registry last.
+3. **Section 2 is a symptom → evidence → cause → action table.**
+4. Full inventories (every file, every registry row) go in the appendix, never at the top.
+
+`build-probe-plan` also writes `ops-card.md`: the same paste-ready checks generated from the actual paths and service names of this product. Prefer copying its commands verbatim over retyping them.
 
 Keep chat output bounded: summarize the top findings and point at files. Quote at most a few lines of raw tool output.
 
