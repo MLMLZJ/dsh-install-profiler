@@ -101,7 +101,7 @@ $keys = @(
 foreach ($k in $keys) {
   try {
     foreach ($p in (Get-ItemProperty -Path $k -ErrorAction SilentlyContinue)) {
-      if ((Test-Match $p.DisplayName) -or (Test-Match $p.InstallLocation) -or (Test-Match $p.Publisher -and (Test-Match $p.DisplayName))) {
+      if ((Test-Match $p.DisplayName) -or (Test-Match $p.InstallLocation) -or (Test-Match $p.UninstallString) -or (Test-Match $p.Publisher)) {
         $uninstall += [pscustomobject][ordered]@{
           displayName     = $p.DisplayName
           displayVersion  = $p.DisplayVersion
@@ -225,7 +225,9 @@ $candidateDirs = @()
 foreach ($root in @($env:ProgramData, $env:LOCALAPPDATA, $env:APPDATA, "$env:ProgramFiles", "${env:ProgramFiles(x86)}")) {
   if (-not $root) { continue }
   try {
-    foreach ($d in (Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)) {
+    # Two levels deep: vendor-nested layouts such as %APPDATA%\Tencent\WXWork
+    # are invisible to a first-level-only scan.
+    foreach ($d in (Get-ChildItem -LiteralPath $root -Directory -Depth 2 -ErrorAction SilentlyContinue)) {
       if ($d.Name -like "*$pattern*") { $candidateDirs += $d.FullName }
     }
   }

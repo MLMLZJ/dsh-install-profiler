@@ -311,8 +311,17 @@ foreach ($s in $serviceTargets) {
   if ($s.name) { Add-RegTarget ("HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\" + $s.name) 'service (derived)' }
 }
 if ($str -and $str.evidence -and $str.evidence.registry) {
+  # Chromium/V8 binaries carry OS-generic keys (DirectX, Intel MediaSDK, DNS
+  # policy). Keep those out unless they mention the app itself, otherwise the
+  # plan fills with noise the app never touches.
+  $appTokens = @()
+  if ($appRoot) { $appTokens += [IO.Path]::GetFileName($appRoot) }
+  if ($pf -and $pf.product -and $pf.product.name) { $appTokens += [string]$pf.product.name }
+  $appTokenRx = if ($appTokens.Count -gt 0) { '(?i)(' + (($appTokens | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')' } else { $null }
+  $noiseRx = '(?i)^(Software|SOFTWARE)\\(Microsoft|Intel|Khronos|Policies|Google|NVIDIA)\\'
   foreach ($rp in @($str.evidence.registry | Select-Object -First 40)) {
     $text = [string]$rp
+    if ($text -match $noiseRx -and -not ($appTokenRx -and $text -match $appTokenRx)) { continue }
     if ($text -match '^(?i)(HKEY_|HKLM|HKCU|HKCR|HKU|HKCC)\\') {
       Add-RegTarget $text 'registry path mined from the binary'
       continue
