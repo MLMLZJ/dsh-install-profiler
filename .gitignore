@@ -1,0 +1,8 @@
+# OS noise
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# local scratch
+*.log
+*.tmp

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local/dsh-install-profiler/profile.schema.json",
+  "title": "Installer profile",
+  "description": "Machine-readable installation profile produced by export-msi-tables.ps1. Downstream tools (e.g. a PC-diagnostic rule engine) can key on these fields.",
+  "type": "object",
+  "required": ["tool", "source", "product", "summary"],
+  "properties": {
+    "tool": { "type": "string", "const": "export-msi-tables" },
+    "toolVersion": { "type": "string" },
+    "generated": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "type": ["string", "null"] },
+        "sizeBytes": { "type": "number" },
+        "lastWrite": { "type": "string" }
+      }
+    },
+    "product": {
+      "type": "object",
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] },
+        "manufacturer": { "type": ["string", "null"] },
+        "productCode": { "type": ["string", "null"] },
+        "upgradeCode": { "type": ["string", "null"] },
+        "language": { "type": ["string", "null"] },
+        "template": { "type": "string" },
+        "architecture": { "type": "string", "enum": ["x86", "x64", "arm64", "unknown"] },
+        "allUsers": { "type": ["string", "null"] },
+        "perUser": { "type": ["string", "null"] },
+        "installDirProp": { "type": ["string", "null"] }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "table": { "type": "string" },
+              "rows": { "type": "number" },
+              "exported": { "type": "boolean" },
+              "reason": { "type": "string" },
+              "columns": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "directories": { "type": "number" },
+        "components": { "type": "number" },
+        "files": { "type": "number" },
+        "filesTotalBytes": { "type": "number" },
+        "registryWrites": { "type": "number" },
+        "services": { "type": "number" },
+        "shortcuts": { "type": "number" },
+        "customActions": { "type": "number" },
+        "launchConditions": { "type": "number" },
+        "upgrades": { "type": "number" },
+        "features": { "type": "number" }
+      }
+    },
+    "installPaths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "parent": { "type": "string" },
+          "path": { "type": "string" },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "folderProperties": { "type": "object", "additionalProperties": { "type": "string" } },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": { "type": "string" },
+          "name": { "type": "string" },
+          "size": { "type": "number" },
+          "version": { "type": "string" },
+          "component": { "type": "string" },
+          "path": { "type": "string" },
+          "attributes": { "type": "string" }
+        }
+      }
+    },
+    "registry": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "root": { "type": "string" },
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "value": { "type": "string" },
+          "component": { "type": "string" },
+          "fullPath": { "type": "string" }
+        }
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "displayName": { "type": "string" },
+          "description": { "type": "string" },
+          "startType": { "type": "string" },
+          "startTypeName": { "type": "string" },
+          "serviceType": { "type": "string" },
+          "startName": { "type": "string" },
+          "binaryPath": { "type": ["string", "null"] },
+          "arguments": { "type": "string" }
+        }
+      }
+    },
+    "shortcuts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "dirPath": { "type": "string" },
+          "target": { "type": "string" },
+          "component": { "type": "string" }
+        }
+      }
+    },
+    "eventLogRegistryWrites": { "type": "array" },
+    "customActions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string" },
+          "type": { "type": "string" },
+          "kind": { "type": "string" },
+          "source": { "type": "string" },
+          "target": { "type": "string" }
+        }
+      }
+    },
+    "launchConditions": { "type": "array" },
+    "upgrades": { "type": "array" },
+    "properties": { "type": "object", "additionalProperties": { "type": "string" } },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

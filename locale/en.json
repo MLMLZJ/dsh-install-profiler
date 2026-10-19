@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Install Profiler",
+    "description": "Profiles a Windows installer — install layout, registry, services, config files, logs, Event Log sources — then derives a targeted dynamic probe, diffs before/after snapshots, and diagnoses faults with the mechanism behind each fix."
+  }
+}

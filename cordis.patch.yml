@@ -1,0 +1,7 @@
+# Bundle patch: inserts one independently switchable Host plugin row.
+# Disable this row (or the whole bundle) in Plugin Manager to remove the
+# installer-profiler skill from the session catalog.
+- insert:
+    - id: install-profiler
+      name: '@local/dsh-install-profiler'
+      config: {}
