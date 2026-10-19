@@ -210,6 +210,8 @@ Keep chat output bounded: summarize the top findings and point at files. Quote a
 
 - PowerShell 5.1: MSI COM `Execute()`/`Close()` leak empty values into the pipeline — always prefix `[void]`. Otherwise table reads return phantom columns and row data shifts.
 - PowerShell 5.1 reads a `.ps1` file **without BOM as ANSI**; keep bundled scripts ASCII-only or the Chinese in comments/strings turns into mojibake before it ever reaches output.
+- On Windows `npx` resolves to `npx.ps1`, which a restricted ExecutionPolicy blocks; use `cmd /c npx ...` (or `npx.cmd`). The same applies to `npm`. Electron `app.asar` extraction needs this.
+- electron-builder ships an NSIS installer whose payload is `$PLUGINSDIR\app-64.7z` (or `app-32.7z`) holding `resources/app.asar`. `detect-installer` will say `nsis` — that is correct for the outer layer; extract it and continue as an Electron app.
 - `@($someGenericList)` and pipelines over `List[object]` can throw the misleading `Argument types do not match` (`PSToObjectArrayBinder`); call `.ToArray()` first.
 - `try { } catch { }` is a statement, not an expression — it cannot sit inside a hashtable literal.
 - `strings`-style scanning is only meaningful on uncompressed data; a packed or SFX payload yields garbage, and mistaking that garbage for evidence is worse than saying "packed".

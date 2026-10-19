@@ -393,6 +393,13 @@ switch ($best.type) {
 }
 $report.extraction = $plan
 
+if ($best -and $best.type -eq 'nsis') {
+  $report.notes += 'electron-builder also ships as NSIS: if the extracted payload contains $PLUGINSDIR\app-64.7z or app-32.7z, unpack it and continue as an Electron app (resources/app.asar).'
+}
+if ($best -and $best.type -eq 'electron') {
+  $report.notes += 'Windows resolves npx to npx.ps1, which a restricted ExecutionPolicy blocks; run: cmd /c npx --yes @electron/asar extract <app.asar> <dest>'
+}
+
 if ($report.candidates.Count -eq 0) {
   $report.notes += 'No known installer family matched. Try: 7z l "<file>" and inspect the payload manually.'
 }

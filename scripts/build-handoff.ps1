@@ -260,7 +260,7 @@ switch ($branch) {
     $cmds.Add([pscustomobject][ordered]@{ purpose = 'confirm CLR header'; command = "& '$toolObjdump' -x '$exePath' | Select-String -Pattern 'CLR|mscoree'"; available = [bool]$toolObjdump })
   }
   'electron' {
-    $cmd = if ($toolNpx) { "npx --yes @electron/asar extract '<app.asar>' '<out-dir>'" } else { '7z x <app.asar> -o<out-dir>' }
+    $cmd = if ($toolNpx) { "cmd /c npx --yes @electron/asar extract '<app.asar>' '<out-dir>'" } else { '7z x <app.asar> -o<out-dir>' }
     $cmds.Add([pscustomobject][ordered]@{ purpose = 'extract asar'; command = $cmd; available = [bool]$toolNpx })
     $cmds.Add([pscustomobject][ordered]@{ purpose = 'inspect entry'; command = "Get-Content '<out-dir>\\package.json' ; Get-Content '<out-dir>\\main.js' -TotalCount 80"; available = $true })
   }

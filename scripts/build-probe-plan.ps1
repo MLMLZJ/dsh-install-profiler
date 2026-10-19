@@ -534,6 +534,21 @@ $eventArr   = $eventQueries.ToArray()
 $checkArr   = $checks.ToArray()
 $procmonArr = $procmon.ToArray()
 
+# Without an MSI there is no ProductName property; the main executable's version
+# resource is the next best identity source (Electron apps carry it).
+$appProduct = $null
+if (-not $pf -and $appRoot) {
+  $appProduct = [ordered]@{ name = (Split-Path -Leaf $appRoot); version = $null; architecture = $arch }
+  $mainExeForIdentity = Get-ChildItem -LiteralPath $appRoot -Filter *.exe -File -ErrorAction SilentlyContinue |
+    Sort-Object Length -Descending | Select-Object -First 1
+  if ($mainExeForIdentity) {
+    $vi = $mainExeForIdentity.VersionInfo
+    if ($vi.ProductName) { $appProduct.name = [string]$vi.ProductName }
+    if ($vi.FileVersion) { $appProduct.version = [string]$vi.FileVersion }
+    elseif ($vi.ProductVersion) { $appProduct.version = [string]$vi.ProductVersion }
+  }
+}
+
 $plan = [ordered]@{
   tool        = 'build-probe-plan'
   toolVersion = $ToolVersion
@@ -544,7 +559,7 @@ $plan = [ordered]@{
     strings = if ($Strings -and (Test-Path -LiteralPath $Strings)) { (Resolve-Path -LiteralPath $Strings).Path } else { $null }
     appDir  = $appRoot
   }
-  product     = if ($pf) { $pf.product } else { [ordered]@{ name = (Split-Path -Leaf $appRoot); version = $null; architecture = $arch } }
+  product     = if ($pf) { $pf.product } else { $appProduct }
   targetMachine = [ordered]@{
     name = $env:COMPUTERNAME; os = [string]$env:OS; psVersion = $PSVersionTable.PSVersion.ToString()
     is64BitOs = $is64Os; programFiles = $programFiles
