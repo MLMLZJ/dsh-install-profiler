@@ -7,6 +7,10 @@ map — install paths, registry writes, services, config files, logs, Event Log
 sources — and then diagnose install/startup/runtime faults with a
 symptom→cause→mechanism→fix chain.
 
+Part of the **DSH plugins** index: <https://github.com/MLMLZJ/dsh-plugins>
+Companion plugin: <https://github.com/MLMLZJ/dsh-reverse-skill> (decompilation;
+consumes the `handoff.md` this plugin produces).
+
 Disable the row (or the whole bundle) in Plugin Manager and the skill disappears
 from the session catalog; enable it again and it comes back, re-reading
 `SKILL.md` so edits apply without restarting Harness.
