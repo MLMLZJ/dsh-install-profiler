@@ -197,3 +197,75 @@ reg query "HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\<Source�
 
 答不出第三问的，写成"待验证假设"，不要写成根因。
 
+
+---
+
+## 9. 长时间运行后的性能问题（CPU 高 / 线程泄漏 / 内存涨 / 句柄泄漏）
+
+单次快照看不出泄漏，必须**连续采样**。判据是"单调增长"，不是某个瞬间的数字。
+
+### 9.1 先采样
+
+```powershell
+# 默认 12 次、每 5 秒一次；长跑问题建议 24 次 × 30 秒
+watch-process.ps1 -Name '<进程名>' -Samples 24 -IntervalSeconds 30 -OutDir .\re\<case>\resource
+```
+
+输出 `resource-watch.md`：CPU%、线程数、句柄数、私有内存的时间序列，外加"线程增长是否单调"和"哪些线程在吃 CPU"。
+
+判读：
+
+| 曲线 | 结论 |
+|---|---|
+| 线程数单调上升、不回落到基线 | 线程泄漏（创建了不回收） |
+| 句柄数单调上升 | 句柄/GDI/USER 泄漏（文件、窗口、画笔未释放） |
+| 私有内存持续上升、GC 后不回落 | 内存泄漏或缓存无上限 |
+| CPU 持续高但线程都在 Wait | 不是忙等，而是频繁唤醒（定时器过密/轮询/GC） |
+| 单个线程 CPU delta 持续最高、状态 Running | 忙等/spin 或死循环 |
+| 进程中途消失 | 崩溃；转第 3 节 |
+
+> Chromium/CEF 类应用（如微信、企业微信、有道、B 站客户端）要**分进程统计**：
+> `Get-Process | Where-Object { $_.Path -like '*<安装目录>*' } | Select Id,ProcessName,Threads,HandleCount`
+> 主进程泄漏和 renderer 泄漏是两回事，混在一起会误判。
+
+### 9.2 留证据再重启
+
+重启会毁掉现场。顺序：**采样 → 抓转储 → 记时间点 → 才重启**。
+
+```powershell
+# 由任务管理器：详细信息 → 右键进程 → 创建转储文件
+# 或用 Sysinternals procdump（需用户批准安装）
+procdump -ma <PID> <输出目录>
+
+# 事件日志里同时段的崩溃/挂起
+Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=(Get-Date).AddHours(-6);Id=1000,1001,1002} -MaxEvents 30
+```
+
+拿到 dump 后（授权范围内）：
+
+```
+!analyze -v          # 异常/挂起分析
+!runaway 1           # 各线程 CPU 时间，直接指出吃 CPU 的线程
+~*k                  # 所有线程调用栈
+```
+
+### 9.3 机制（常见根因）
+
+| 现象 | 常见机制 |
+|---|---|
+| 线程泄漏 | 每次操作 `CreateThread`/`std::thread` 后未 join/detach；事件/定时器回调注册后未注销；线程池任务里再开线程；CEF/Chromium renderer 反复创建未回收 |
+| CPU 高但吞吐低 | 忙等（spin）、轮询间隔过小、定时器风暴、锁竞争、GC 抖动 |
+| 句柄泄漏 | 文件/注册表句柄未 Close；GDI 对象（HBRUSH/HDC）未 Delete；窗口句柄未销毁 |
+| 内存涨 | 缓存/字典无上限、日志在内存里累积、图片/解码缓冲未释放 |
+
+### 9.4 处置
+
+| 优先级 | 动作 | 说明 |
+|---|---|---|
+| P0 | 抓 dump + 采样数据，报厂商 | 这类 bug 只能靠厂商修；没有 dump 的反馈基本无效 |
+| P1 | 升级到最新版本 | 先确认问题版本与修复版本 |
+| P2 | 计划任务定期重启 | 缓解手段，不是修复；重启前务必留证据 |
+| P3 | 限制功能/插件 | 缩小触发面（如关闭某模块）以定位 |
+| P4 | 观察指标告警 | 线程数/句柄数超过阈值时提前通知 |
+
+**不要**把"定期重启"当成修复；也不要在没采样的情况下断言"内存泄漏"。

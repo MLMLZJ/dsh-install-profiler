@@ -192,7 +192,9 @@ Read the diff against the playbook before writing conclusions (`references/fault
 
 ## Step 7 — diagnose
 
-Read `references/fault-playbook.md` for the full symptom→cause→check→fix tables. The short form — always in this order, because the cheaper explanations come first:
+Read `references/fault-playbook.md` for the full symptom→cause→check→fix tables.
+
+For long-running complaints - CPU climbing after hours, thread or handle count that only goes up, memory that never comes back - do not reason from one Task Manager reading: sample with `watch-process.ps1 -Name <process> -Samples 24 -IntervalSeconds 30`. Monotonic growth plus the per-thread CPU delta is the evidence; a single snapshot cannot distinguish a leak from a busy moment. Playbook section 9 covers the verdict table, dump capture and the usual mechanisms. The short form — always in this order, because the cheaper explanations come first:
 
 1. **Dependency** — is the prerequisite actually present? (VC++ runtime, .NET version, driver, port, upstream service)
 2. **Permission** — can the account that runs it do the thing? (service account, ACL on install/log dirs, UAC, AppLocker/WDAC/Defender ASR)

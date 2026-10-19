@@ -86,6 +86,7 @@ folders.
 | `scripts/mine-strings.ps1` | No MSI database? Mine registry paths, log paths, services, URLs, GUIDs and error templates out of the binary (ASCII + UTF-16LE) |
 | `scripts/build-handoff.ps1` | Package the evidence into a paste-ready brief for the reverse-engineering skill: branch, established facts, questions, commands, evidence contract |
 | `scripts/build-ops-sheet.ps1` | Assemble the complete operations sheet: every uninstall value, full service registry keys, all startup entries, every log/config file, event sources, MSI registry rows + triage commands |
+| `scripts/watch-process.ps1` | Sample a process over time to prove CPU/thread/handle/memory leaks and name the threads that consume CPU |
 | `scripts/export-msi-tables.ps1` | MSI tables → JSON/CSV + derived profile |
 | `scripts/collect-state.ps1` | Read-only runtime snapshot for an installed app |
 | `scripts/build-probe-plan.ps1` | Static profile → targeted dynamic-observation plan |
