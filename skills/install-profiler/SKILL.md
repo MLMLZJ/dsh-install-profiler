@@ -220,6 +220,8 @@ The Chinese `report.md` must carry the same completeness, in this order:
 4. **完整清单** — every captured path, registry key and value, service key, task, startup entry, log file, event source. Do not silently truncate: if a cap applies, print the total and say what is not shown.
 5. **故障分析** — only when the user reported a symptom.
 
+For performance complaints (CPU climbing after hours, thread/handle count growing) the report gives the first-line view: sample with `watch-process.ps1`, state the verdict, list the mitigation, and list what to hand to the vendor. Dump analysis (WinDbg, `!runaway`) is second-line work and belongs in an appendix note, never in the first-line steps.
+
 Never drop captured data to make the report shorter; move it to a later section instead. Keep chat output bounded (summarize, point at files), but the report itself is allowed to be long.
 
 ## Known traps (learned the hard way)
