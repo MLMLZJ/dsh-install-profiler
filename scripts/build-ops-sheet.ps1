@@ -148,8 +148,19 @@ if ($st -and $st.environment) {
 }
 if ($st -and $st.pendingReboot) { L '| Pending reboot | **YES** - can block install/repair/uninstall |' }
 L ''
+if (-not $st) {
+  L '> **Runtime state was not collected** (the product is not installed on this machine, or -State was not supplied).'
+  L '> Sections marked "not collected" must be filled on the affected machine with:'
+  L '>'
+  L '> ```powershell'
+  L ('> collect-state.ps1 -Name ' + (Quote ([string]$productName)) + ' -InstallDir ''<install dir>'' -OutDir .\profile')
+  L '> build-probe-plan.ps1 -State .\profile\state.json -OutDir .\plan'
+  L '> build-ops-sheet.ps1 -State .\profile\state.json -Plan .\plan\probe-plan.json -Detect .\evidence\detect.json -OutDir .\ops'
+  L '> ```'
+  L ''
+}
 if ($installRoots.Count -gt 0) {
-  L '### Install locations'
+  if ($st) { L '### Install locations' } else { L '### Payload extraction directory (product is NOT installed here; the real install path is chosen by the installer at run time)' }
   L ''
   L '| Path | Exists |'
   L '|---|---|'
@@ -163,8 +174,10 @@ if ($mainExe) {
 
 # -------------------------------------------------------------- uninstall
 $uninstallData = @()
+L '## 1. Uninstall entries (full registry values)'
+L ''
+if (-not ($st -and $st.uninstall)) { L '_Not collected - product not installed on this machine._'; L '' }
 if ($st -and $st.uninstall) {
-  L '## 1. Uninstall entries (full registry values)'
   L ''
   foreach ($u in $st.uninstall) {
     $key = [string]$u.hive
@@ -308,6 +321,12 @@ L ''
 # ------------------------------------------------------------------ logs
 L '## 6. Log files'
 L ''
+if (-not ($st -and $st.logFiles) -and $sx -and $sx.evidence -and $sx.evidence.logFiles -and $sx.evidence.logFiles.Count -gt 0) {
+  L 'Not installed here, so exact paths are unknown. These log names were found inside the binary - resolve them against the install/data directories after installation:'
+  L ''
+  foreach ($n in @($sx.evidence.logFiles | Select-Object -First 15)) { L ('- `' + $n + '`') }
+  L ''
+}
 if ($st -and $st.logFiles -and $st.logFiles.Count -gt 0) {
   L ('Observed log-like files: ' + $st.logFiles.Count)
   L ''
