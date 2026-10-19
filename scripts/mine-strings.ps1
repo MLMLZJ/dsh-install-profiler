@@ -175,7 +175,13 @@ function Get-Category([string]$s) {
   if ($rxRegistry.IsMatch($s) -or $rxSoftware.IsMatch($s)) { return 'registry' }
   if ($rxUrl.IsMatch($s)) { return 'urls' }
   if ($rxGuid.IsMatch($s)) { return 'guids' }
-  if ($rxPath.IsMatch($s) -and $s.Length -ge 8) { return 'paths' }
+  # Require a drive/UNC prefix, a plausible length and at least two separators.
+  # Without this, short random runs like "W:\A8Mm7" from compressed data pass as
+  # "paths"; with it, real build paths like E:\x\rel\third_party\... survive.
+  if ($rxPath.IsMatch($s) -and $s.Length -ge 10) {
+    $seps = $s.Split('\').Count - 1
+    if ($seps -ge 2) { return 'paths' }
+  }
   if ($rxLogExt.IsMatch($s) -or $rxLogDir.IsMatch($s)) { return 'logFiles' }
   if ($rxEvent.IsMatch($s)) { return 'eventLog' }
   if ($rxService.IsMatch($s)) { return 'services' }

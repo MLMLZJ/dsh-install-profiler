@@ -313,8 +313,16 @@ foreach ($s in $serviceTargets) {
 if ($str -and $str.evidence -and $str.evidence.registry) {
   foreach ($rp in @($str.evidence.registry | Select-Object -First 40)) {
     $text = [string]$rp
-    if ($text -notmatch '^(?i)(HKEY_|HKLM|HKCU|HKCR|HKU|HKCC)\\') { continue }
-    Add-RegTarget $text 'registry path mined from the binary'
+    if ($text -match '^(?i)(HKEY_|HKLM|HKCU|HKCR|HKU|HKCC)\\') {
+      Add-RegTarget $text 'registry path mined from the binary'
+      continue
+    }
+    # A relative "Software\Vendor\App" string has no hive in it. Emit both
+    # candidates instead of dropping the most useful evidence.
+    if ($text -match '^(?i)(Software|System)\\') {
+      Add-RegTarget ("HKEY_CURRENT_USER\" + $text) 'mined from binary; hive unknown, HKCU candidate'
+      Add-RegTarget ("HKEY_LOCAL_MACHINE\" + $text) 'mined from binary; hive unknown, HKLM candidate'
+    }
   }
 }
 
@@ -358,9 +366,19 @@ if ($serviceTargets.Count -gt 0) {
       log = 'System'; source = 'Service Control Manager'; ids = @(7000, 7001, 7009, 7011, 7023, 7031, 7034, 7045); reason = 'service start/stop/crash events'
     })
 }
-$eventQueries.Add([pscustomobject][ordered]@{
-    log = 'Application'; source = 'MsiInstaller'; ids = @(1033, 1034, 1040, 11707, 11708, 11724); reason = 'install/repair/uninstall record (present only if logged)'
-  })
+if ($pf) {
+  $eventQueries.Add([pscustomobject][ordered]@{
+      log = 'Application'; source = 'MsiInstaller'; ids = @(1033, 1034, 1040, 11707, 11708, 11724); reason = 'install/repair/uninstall record (present only if logged)'
+    })
+}
+else {
+  $eventQueries.Add([pscustomobject][ordered]@{
+      log = 'Application'; source = 'Application Error'; ids = @(1000, 1002); reason = 'application crash (no MSI involved)'
+    })
+  $eventQueries.Add([pscustomobject][ordered]@{
+      log = 'Application'; source = 'Windows Error Reporting'; ids = @(1001); reason = 'WER report (no MSI involved)'
+    })
+}
 
 # --------------------------------------------------------- files / processes
 $processNames = @()
@@ -383,6 +401,7 @@ foreach ($f in $fileRows) {
 if ($appRoot) {
   foreach ($exe in (Get-ChildItem -LiteralPath $appRoot -Filter *.exe -File -ErrorAction SilentlyContinue | Select-Object -First 20)) {
     $base = [IO.Path]::GetFileNameWithoutExtension($exe.Name)
+    if ($base -match '(?i)^(uninstall|cuninst)') { continue }
     if ($processNames -notcontains $base) { $processNames += $base }
     if ($binaryCandidates -notcontains $exe.FullName) { $binaryCandidates += $exe.FullName }
   }
